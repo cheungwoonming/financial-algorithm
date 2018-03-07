@@ -2,6 +2,7 @@ import xlrd
 import numpy as np
 from scipy.optimize import leastsq
 import pylab as pl
+import csv
 
 
 # 读取excel表
@@ -104,31 +105,34 @@ def loss_func(p, y, x):
 def construct_xy(division):
     n_row = np.shape(division)[0]
     n_column = np.shape(division)[1]
-    x = np.zeros(shape=(n_row * n_column))
-    y = np.zeros(shape=(n_row * n_column))
+    x_array = np.zeros(shape=(n_row, n_column))
+    y_array = np.zeros(shape=(n_row, n_column))
     for i in range(n_row):
         for j in range(n_column):
-            x[i * n_column + j] = (j + 1)
-            y[i * n_column + j] = division[i][j]
-    return x, y
+            x_array[i][j] = (j + 1)
+            y_array[i][j] = division[i][j]
+    return x_array, y_array
 
 
 # 拟合多项式
 def fit_polynomial(division, m):
-    x, y = construct_xy(division)
+    x_array, y_array = construct_xy(division)
     p_init = np.zeros(m+1)
-    # 最小二乘拟合
-    plsq = leastsq(loss_func, p_init, args=(y, x))
-    parameters = plsq[0]
+    polynomial_func_array = []
+    RMSE = []
+    for i in range(len(x_array)):
+        # 最小二乘拟合
+        plsq = leastsq(loss_func, p_init, args=(y_array[i], x_array[i]))
+        parameters = plsq[0]
 
-    cost = np.sum(loss_func(parameters, y, x) ** 2) / len(x)
-    print("RMSE: %f" % (cost ** 0.5))
-    print("parameters : %s" % parameters)
+        cost = np.sum(loss_func(parameters, y_array[i], x_array[i]) ** 2) / len(x_array[i])
+        RMSE.append(cost ** 0.5)
+        polynomial_func_array.append(np.poly1d(parameters))
+    print(RMSE)
+    return polynomial_func_array, RMSE
 
-    return np.poly1d(parameters)
 
-
-def compute_covariance(x_func, x_segments, y_func, y_segments):
+def compute_covariance(x_func_array, x_segments, y_func_array, y_segments):
     length = np.shape(x_segments)[0]
     s = np.shape(x_segments)[1]
 
@@ -136,8 +140,8 @@ def compute_covariance(x_func, x_segments, y_func, y_segments):
     i_array = np.linspace(1, s, s)
 
     for v in range(length):
-        temp = abs(x_segments[v] - x_func(i_array)) * abs(y_segments[v] - y_func(i_array))
-        covariance.append(np.sum(temp)/s)
+        temp = abs(x_segments[v] - x_func_array[v](i_array)) * abs(y_segments[v] - y_func_array[v](i_array))
+        covariance.append(np.mean(temp))
 
     return np.array(covariance)
 
@@ -150,7 +154,6 @@ def fluctuation_func(array, q):
 
 
 if __name__ == "__main__":
-    s = 20
     m = 5
     q = 10
 
@@ -159,6 +162,14 @@ if __name__ == "__main__":
     # 得到新序列
     x_profile = construct_profile(x_value)
     y_profile = construct_profile(y_value)
+    # 修正计算误差，最后一项应该是0
+    x_profile[-1] = 0
+    y_profile[-1] = 0
+
+    writer = csv.writer(open("data/new time series.csv", "w", newline=""))
+    writer.writerow(["X(t)", "Y(t)"])
+    for i, j in zip(x_profile, y_profile):
+        writer.writerow([str(i), str(j)])
 
     temp_array = np.arange(2.75, 5.6, 0.25)
     s_array = [int(np.exp(i)) for i in temp_array]
@@ -169,11 +180,18 @@ if __name__ == "__main__":
         y_division = divide_profile(y_profile, s)
 
         # 得到多项式拟合函数
-        x_polynomial_func = fit_polynomial(x_division, m)
-        y_polynomial_func = fit_polynomial(y_division, m)
+        x_polynomial_func_array, x_rmse = fit_polynomial(x_division, m)
+        y_polynomial_func_array, y_rmse = fit_polynomial(y_division, m)
 
-        # 得到去势协方差
-        F2 = compute_covariance(x_polynomial_func, x_division, y_polynomial_func, y_division)
+        # 得到detrended covariance F2(s,v)
+        F2 = compute_covariance(x_polynomial_func_array, x_division, y_polynomial_func_array, y_division)
+
+        writer = csv.writer(open("data/s=" + str(s) + ".csv", "w", newline=""))
+        writer.writerow(["x_segment", "x_polynomial", "x_rmse", "y_segment", "y_polynomial", "y_rmse", "F2(s,v)"])
+        for i in range(len(x_division)):
+            writer.writerow([str(x_division[i]), str(x_polynomial_func_array[i].coefficients), str(x_rmse[i]),
+                             str(y_division[i]), str(y_polynomial_func_array[i].coefficients), str(y_rmse[i]),
+                             str(F2[i])])
 
         Fqs = []
         q_array = [i for i in range(-q, q+1, 2)]
@@ -182,8 +200,18 @@ if __name__ == "__main__":
         print(Fqs)
         result.append(Fqs)
 
-    result = np.array(result)
-    result = result.transpose()
+    writer = csv.writer(open("data/s-Fq.csv", "w", newline=""))
+    q_array = ["q=" + str(i) for i in range(-q, q + 1, 2)]
+    head = [""]
+    head.extend(q_array)
+    writer.writerow(head)
+    for i in range(len(s_array)):
+        row = ["s=" + str(s_array[i])]
+        temp = [str(j) for j in result[i]]
+        row.extend(temp)
+        writer.writerow(row)
+
+    result = np.array(result).transpose()
     s_array = np.log(s_array)
     result = np.log(result)
     for row in result:
