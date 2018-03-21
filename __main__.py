@@ -4,19 +4,20 @@ from scipy.optimize import leastsq
 import pylab as pl
 import csv
 
+# m值
+m = 4
+# q值的最大值，以2位间隔计算[-q, q]的值
+q = 10
+
 
 # 读取excel表
 def read_excel(file_name):
     excel_file = xlrd.open_workbook(file_name)
-    # print(excel_file.sheet_names())
     use_sheet = excel_file.sheet_by_name("Sheet2")
-    # print(use_sheet.name, use_sheet.nrows, use_sheet.ncols)
     x_value = use_sheet.col_values(0)
     y_value = use_sheet.col_values(1)
     x_value = np.array(x_value[1:], np.float)
     y_value = np.array(y_value[1:], np.float)
-    # print(x_value)
-    # print(y_value)
     return x_value, y_value
 
 
@@ -64,11 +65,11 @@ def construct_xy2(division, m):
     return x, y
 
 
+# 不用了
 # 梯度下降，返回次数项由低到高对应的系数，包括0次项
 def gradient_descent(x, y, m=4, eta=0.001, max_iterations=10000):
     x_t = x.transpose()
     parameters = np.zeros(m+1)  # 初始化参数
-    # parameters = np.array([-1.55245949e+01, 1.97244256e-02, 3.59871120e-03, -1.83936582e-04, 2.15314155e-06])
     length = len(x)
     for i in range(max_iterations):
         hypothesis = np.dot(x, parameters.transpose())
@@ -81,6 +82,7 @@ def gradient_descent(x, y, m=4, eta=0.001, max_iterations=10000):
     return parameters
 
 
+# 不用了
 # 拟合多项式
 def fit_polynomial2(division, s, m, eta, max_iterations):
     # 自己写的梯度下降，仅在低维度的情况下可用
@@ -154,10 +156,7 @@ def fluctuation_func(array, q):
 
 
 if __name__ == "__main__":
-    m = 5
-    q = 10
-
-    x_value, y_value = read_excel("价量.xlsx")
+    x_value, y_value = read_excel("data/价量.xlsx")
 
     # 得到新序列
     x_profile = construct_profile(x_value)
@@ -173,7 +172,12 @@ if __name__ == "__main__":
 
     temp_array = np.arange(2.75, 5.6, 0.25)
     s_array = [int(np.exp(i)) for i in temp_array]
-    result = []
+    Fqs_result = []
+    h_xyq_results = []
+    h_xyq_derivative_result = []
+    q_array = np.array([i for i in range(-q, q + 1, 2)])
+    interval = 0.1
+    q_another_array = np.array([i + interval for i in q_array])  # 用来求斜率
     for s in s_array:
         # 得到分割后的（2Ns * s）序列
         x_division = divide_profile(x_profile, s)
@@ -186,36 +190,96 @@ if __name__ == "__main__":
         # 得到detrended covariance F2(s,v)
         F2 = compute_covariance(x_polynomial_func_array, x_division, y_polynomial_func_array, y_division)
 
-        writer = csv.writer(open("data/s=" + str(s) + ".csv", "w", newline=""))
-        writer.writerow(["x_segment", "x_polynomial", "x_rmse", "y_segment", "y_polynomial", "y_rmse", "F2(s,v)"])
-        for i in range(len(x_division)):
-            writer.writerow([str(x_division[i]), str(x_polynomial_func_array[i].coefficients), str(x_rmse[i]),
-                             str(y_division[i]), str(y_polynomial_func_array[i].coefficients), str(y_rmse[i]),
-                             str(F2[i])])
+        # 记录每一个多项式拟合的参数和误差， 需要的话可以取消注释
+        # writer = csv.writer(open("data/s=" + str(s) + ".csv", "w", newline=""))
+        # writer.writerow(["x_segment", "x_polynomial", "x_rmse", "y_segment", "y_polynomial", "y_rmse", "F2(s,v)"])
+        # for i in range(len(x_division)):
+        #     writer.writerow([str(x_division[i]), str(x_polynomial_func_array[i].coefficients), str(x_rmse[i]),
+        #                      str(y_division[i]), str(y_polynomial_func_array[i].coefficients), str(y_rmse[i]),
+        #                      str(F2[i])])
 
         Fqs = []
-        q_array = [i for i in range(-q, q+1, 2)]
         for i in q_array:
             Fqs.append(fluctuation_func(F2, i))
-        print(Fqs)
-        result.append(Fqs)
 
-    writer = csv.writer(open("data/s-Fq.csv", "w", newline=""))
-    q_array = ["q=" + str(i) for i in range(-q, q + 1, 2)]
+        # q + interval
+        Fqs_another = []
+        for i in q_another_array:
+            Fqs_another.append(fluctuation_func(F2, i))
+
+        Fqs_result.append(Fqs)
+        # 计算h_xy(q), 忽略常数logC
+        h_xyq = np.log(Fqs)/np.log(s)
+        h_xyq_results.append(h_xyq)
+
+        h_xyq_another = np.log(Fqs_another)/np.log(s)
+        # h_xy(q)在每一个q值的导数（斜率）
+        h_xyq_derivative_result.append((h_xyq_another-h_xyq)/interval)
+
+    # 记录h_xy(q)
+    writer = csv.writer(open("data/h_xy(q).csv", "w", newline=""))
+    q_head_array = ["q=" + str(i) for i in range(-q, q + 1, 2)]
     head = [""]
-    head.extend(q_array)
+    head.extend(q_head_array)
     writer.writerow(head)
     for i in range(len(s_array)):
         row = ["s=" + str(s_array[i])]
-        temp = [str(j) for j in result[i]]
+        temp = [str(j) for j in h_xyq_results[i]]
         row.extend(temp)
         writer.writerow(row)
 
-    result = np.array(result).transpose()
-    s_array = np.log(s_array)
-    result = np.log(result)
-    for row in result:
-        pl.plot(s_array, row)
-    pl.xlabel("lns")
-    pl.ylabel("lnFq")
-    pl.show()
+    h_xyq_results = np.array(h_xyq_results)
+    h_xyq_derivative_result = np.array(h_xyq_derivative_result)
+    # 计算tau_xy(q)
+    tau_xyq_results = q_array * h_xyq_results - 1
+    # 计算alpha_xy(q)
+    alpha_xy_result = h_xyq_results + q_array * h_xyq_derivative_result
+    # 计算f_xy(alpha)
+    f_xy_alpha = q_array * (alpha_xy_result - h_xyq_results) + 1
+
+    # 记录alpha_xy的值
+    writer = csv.writer(open("data/alpha_xy.csv", "w", newline=""))
+    q_head_array = ["q=" + str(i) for i in range(-q, q + 1, 2)]
+    head = [""]
+    head.extend(q_head_array)
+    writer.writerow(head)
+    for i in range(len(s_array)):
+        row = ["s=" + str(s_array[i])]
+        temp = [str(j) for j in alpha_xy_result[i]]
+        row.extend(temp)
+        writer.writerow(row)
+
+    # tao_xy(q)关于q的图
+    pl.figure(figsize=(10, 7))
+    for index, row in enumerate(tau_xyq_results):
+        pl.plot(q_array, row, label=s_array[index])
+    pl.xlabel("q")
+    pl.ylabel("tau_xy(q)")
+    pl.title("m=" + str(m))
+    pl.legend()
+    # pl.show()
+    pl.savefig("data/tau_xy(q).png")
+
+    # f_xy(alpha)关于alpha的图
+    pl.figure(figsize=(10, 7))
+    for index, row in enumerate(f_xy_alpha):
+        pl.plot(alpha_xy_result[index], row, label=s_array[index])
+    pl.xlabel("alpha")
+    pl.ylabel("f_xy(alpha)")
+    pl.title("m=" + str(m))
+    pl.legend()
+    # pl.show()
+    pl.savefig("data/f_xy(alpha).png")
+
+    # h_xy(q)关于q的图
+    s_array = ["s=" + str(i) for i in s_array]
+    pl.figure(figsize=(10, 7))
+    for index, row in enumerate(h_xyq_results):
+        pl.plot(q_array, row, label=s_array[index])
+    pl.xlabel("q")
+    pl.ylabel("h_xy(q)")
+    pl.title("m=" + str(m))
+    pl.legend()
+    # pl.show()
+    pl.savefig("data/h_xy(q).png")
+
