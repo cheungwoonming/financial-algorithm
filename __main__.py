@@ -238,7 +238,7 @@ if __name__ == "__main__":
     f_xy_alpha = q_array * (alpha_xy_result - h_xyq_results) + 1
 
     # 记录alpha_xy的值
-    writer = csv.writer(open("data/alpha_xy.csv", "w", newline=""))
+    writer = csv.writer(open("data/alpha_xy(q).csv", "w", newline=""))
     q_head_array = ["q=" + str(i) for i in range(-q, q + 1, 2)]
     head = [""]
     head.extend(q_head_array)
