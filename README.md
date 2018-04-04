@@ -24,3 +24,9 @@ f_xy(alphq).png: f_xy关于alpha的图
 h_xy(q).png: h_xy(q)关于q的图
 
 tau_xy(q).png: tau_xy(q)关于q的图
+
+
+
+lns-lnFq.csv: lns与lnFq的值
+
+lns-lnFq.png: lns与lnFq的值

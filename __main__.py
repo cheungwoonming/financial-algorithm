@@ -216,6 +216,32 @@ if __name__ == "__main__":
         # h_xy(q)在每一个q值的导数（斜率）
         h_xyq_derivative_result.append((h_xyq_another-h_xyq)/interval)
 
+    # 记录lns-lnFq的值
+    writer = csv.writer(open("data/lns-lnFq.csv", "w", newline=""))
+    q_array_head = ["q=" + str(i) for i in range(-q, q + 1, 2)]
+    head = ["lnFq(s)"]
+    head.extend(q_array_head)
+    writer.writerow(head)
+    log_s_array = np.log(s_array)
+    temp_result = np.log(Fqs_result)
+    for i in range(len(log_s_array)):
+        row = ["lns=" + str(log_s_array[i])]
+        temp = [str(j) for j in temp_result[i]]
+        row.extend(temp)
+        writer.writerow(row)
+
+    # 画出lns-lnFq的图
+    temp_result = np.array(temp_result).transpose()
+    pl.figure(figsize=(10, 7))
+    for row in temp_result:
+        pl.plot(s_array, row)
+    pl.xlabel("lns")
+    pl.ylabel("lnFq")
+    pl.title("m=" + str(m))
+    pl.legend()
+    # pl.show()
+    pl.savefig("data/lns-lnFq.png")
+
     # 记录h_xy(q)
     writer = csv.writer(open("data/h_xy(q).csv", "w", newline=""))
     q_head_array = ["q=" + str(i) for i in range(-q, q + 1, 2)]
